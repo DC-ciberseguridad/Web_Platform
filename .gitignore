@@ -1,0 +1,5 @@
+.terraform/
+.env/
+app/venv/
+__pycache__
+docker/docker-compose.yml
