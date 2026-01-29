@@ -2,7 +2,7 @@ name: Deploy FastAPI to EC2
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   deploy:
@@ -25,6 +25,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # --------------------
+      # BUILD & PUSH IMAGE
+      # --------------------
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION \
@@ -32,24 +35,40 @@ jobs:
             $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
       - name: Build Docker image
-        run: |
-          docker build -t $ECR_REPO:$IMAGE_TAG -f docker/Dockerfile .
+        run: docker build -t $ECR_REPO:$IMAGE_TAG -f docker/Dockerfile .
 
-      - name: Tag image
+      - name: Tag & Push image
         run: |
           docker tag $ECR_REPO:$IMAGE_TAG \
-          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
 
-      - name: Push image to ECR
-        run: |
           docker push \
-          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
 
-      - name: Deploy on EC2 via SSH
+      # --------------------
+      # TERRAFORM
+      # --------------------
+      - name: Terraform Init
+        working-directory: iac
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: iac
+        run: terraform apply -auto-approve
+
+      - name: Get EC2 Public IP
+        working-directory: iac
+        run: |
+          echo "EC2_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
+
+      # --------------------
+      # DEPLOY VIA SSH
+      # --------------------
+      - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
+          host: ${{ env.EC2_IP }}
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e

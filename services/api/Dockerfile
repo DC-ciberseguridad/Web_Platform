@@ -7,13 +7,13 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Dependencias
-COPY app/requirements.txt .
+COPY /services/api/app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Código
-COPY app .
+COPY /services/api/app .
 
-# Puerto expuesto
+# Puerto interno (solo para Docker / Nginx)
 EXPOSE 8000
 
 # Arranque
