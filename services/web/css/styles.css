@@ -15,29 +15,34 @@ body {
 }
 
 .container {
+  background: #020617;
+  padding: 2rem 3rem;
+  border-radius: 12px;
   text-align: center;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
 }
 
 h1 {
-  margin-bottom: 10px;
+  margin-bottom: 0.5rem;
 }
 
 p {
-  margin-bottom: 20px;
-  color: #cbd5f5;
+  margin-bottom: 1.5rem;
+  opacity: 0.8;
 }
 
 .btn {
   display: inline-block;
-  padding: 10px 16px;
-  background: #38bdf8;
-  color: #0f172a;
+  margin: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #2563eb;
+  color: white;
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-weight: bold;
+  transition: background 0.2s ease;
 }
 
 .btn:hover {
-  background: #0ea5e9;
+  background: #1e40af;
 }
-

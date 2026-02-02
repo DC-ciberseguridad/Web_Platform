@@ -1,15 +1,12 @@
 FROM nginx:1.25-alpine
 
-#Eliminar config default (opcional pero limpio)
+# Copiar nuestra config
+COPY services/web/nginx.conf /etc/nginx/nginx.conf
 
-RUN rm /etc/nginx/conf.d/default.conf
-
-#Copiar HTML estático
-
+# Copiar HTML y CSS
 COPY services/web/html /usr/share/nginx/html
+COPY services/web/css /usr/share/nginx/html/css
 
-#Puerto interno del contenedor
+EXPOSE 80
 
-EXPOSE 80 
-
-#Nginx ya trae el CMD correcto
+CMD ["nginx", "-g", "daemon off;"]
