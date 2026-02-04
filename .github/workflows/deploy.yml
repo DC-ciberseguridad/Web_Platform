@@ -1,8 +1,9 @@
-name: Deploy FastAPI to EC2
+name: Deploy Web Platform
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -11,7 +12,9 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      ECR_REPO: python-api
+      ECR_API: web-platform-api
+      ECR_WEB: web-platform-web
+      ECR_NGINX: web-platform-nginx
       IMAGE_TAG: latest
 
     steps:
@@ -25,69 +28,50 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # --------------------
-      # BUILD & PUSH IMAGE
-      # --------------------
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION \
           | docker login --username AWS --password-stdin \
             $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-      - name: Build Docker image
-        run: docker build -t $ECR_REPO:$IMAGE_TAG -f docker/Dockerfile .
-
-      - name: Tag & Push image
+      # ---------- API ----------
+      - name: Build & Push API
         run: |
-          docker tag $ECR_REPO:$IMAGE_TAG \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
-
+          docker build -t $ECR_API:$IMAGE_TAG -f services/api/Dockerfile .
+          docker tag $ECR_API:$IMAGE_TAG \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API:$IMAGE_TAG
           docker push \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API:$IMAGE_TAG
 
-      # --------------------
-      # TERRAFORM
-      # --------------------
-      - name: Terraform Init
-        working-directory: iac
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: iac
-        run: terraform apply -auto-approve
-
-      - name: Get EC2 Public IP
-        working-directory: iac
+      # ---------- WEB ----------
+      - name: Build & Push Web
         run: |
-          echo "EC2_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
+          docker build -t $ECR_WEB:$IMAGE_TAG -f services/web/Dockerfile .
+          docker tag $ECR_WEB:$IMAGE_TAG \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEB:$IMAGE_TAG
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEB:$IMAGE_TAG
 
-      # --------------------
-      # DEPLOY VIA SSH
-      # --------------------
+      # ---------- NGINX ----------
+      - name: Build & Push Nginx
+        run: |
+          docker build -t $ECR_NGINX:$IMAGE_TAG -f services/nginx/Dockerfile .
+          docker tag $ECR_NGINX:$IMAGE_TAG \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_NGINX:$IMAGE_TAG
+          docker push \
+            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_NGINX:$IMAGE_TAG
+
+      # ---------- DEPLOY ----------
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ env.EC2_IP }}
-          username: ubuntu
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
 
-            REGION=${{ secrets.AWS_REGION }}
-            ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
-            IMAGE=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/python-api:latest
+            cd /opt/web-platform
 
-            aws ecr get-login-password --region $REGION \
-              | docker login --username AWS --password-stdin \
-                $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
-
-            docker pull $IMAGE
-
-            docker stop python_api || true
-            docker rm python_api || true
-
-            docker run -d \
-              --name python_api \
-              -p 8000:8000 \
-              --restart always \
-              $IMAGE
+            docker compose pull
+            docker compose up -d
