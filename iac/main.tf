@@ -61,17 +61,11 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 # ECR (UN SOLO REPO)
 ############################
 resource "aws_ecr_repository" "web_platform" {
-  name = "web-platform"
+  name                 = "web-platform"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
-  }
-
-  image_tag_mutability = "MUTABLE"
-
-  tags = {
-    Name       = "web-platform"
-    ManagedBy = "terraform"
   }
 }
 
@@ -87,7 +81,7 @@ resource "aws_key_pair" "deploy" {
 # SECURITY GROUP (LIMPIO)
 ############################
 resource "aws_security_group" "web_sg" {
-  name = "lab1-web-sg"
+  name = "Web_Platform"
 
   egress {
     from_port   = 0
@@ -97,7 +91,7 @@ resource "aws_security_group" "web_sg" {
   }
 
   tags = {
-    Name       = "lab1-web-sg"
+    Name       = "Web_Platform"
     ManagedBy = "terraform"
   }
 }
