@@ -73,7 +73,7 @@ resource "aws_ecr_repository" "web_platform" {
 # SSH KEY
 ############################
 resource "aws_key_pair" "deploy" {
-  key_name   = "lab1-deploy-key"
+  key_name   = "web-deploy-key"
   public_key = var.ssh_public_key
 }
 
