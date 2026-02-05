@@ -1,0 +1,24 @@
+# docker/docker-compose.local.yml
+services:
+  nginx:
+    build:
+      context: ..
+      dockerfile: services/nginx/Dockerfile
+    container_name: reverse_proxy
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+      - api
+
+  web:
+    build:
+      context: ..
+      dockerfile: services/web/Dockerfile
+    container_name: web_app
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    container_name: fastapi_app

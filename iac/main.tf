@@ -58,13 +58,20 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 }
 
 ############################
-# ECR
+# ECR (UN SOLO REPO)
 ############################
-resource "aws_ecr_repository" "python_api" {
-  name = "python-api"
+resource "aws_ecr_repository" "web_platform" {
+  name = "web-platform"
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  image_tag_mutability = "MUTABLE"
+
+  tags = {
+    Name       = "web-platform"
+    ManagedBy = "terraform"
   }
 }
 
@@ -134,40 +141,12 @@ apt-get install -y docker.io awscli
 systemctl enable docker
 systemctl start docker
 
-# Script de deploy (invocado por GitHub Actions)
-cat <<'SCRIPT' > /usr/local/bin/deploy_app.sh
-#!/bin/bash
-set -e
-
-REGION="us-east-1"
-APP_NAME="python_api"
-IMAGE_NAME="python-api"
-
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-IMAGE="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$IMAGE_NAME:latest"
-
-aws ecr get-login-password --region $REGION | \
-docker login --username AWS --password-stdin \
-$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
-
-docker pull $IMAGE
-
-docker stop $APP_NAME || true
-docker rm $APP_NAME || true
-
-docker run -d \
-  --name $APP_NAME \
-  -p 8000:8000 \
-  --restart always \
-  $IMAGE
-SCRIPT
-
-chmod +x /usr/local/bin/deploy_app.sh
+usermod -aG docker ubuntu
 EOF
 
   user_data_replace_on_change = false
 
   tags = {
-    Name = "lab1-ubuntu-server"
+    Name = "Web_Platform"
   }
 }

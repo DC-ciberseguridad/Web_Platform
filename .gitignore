@@ -2,4 +2,4 @@
 .env/
 services/api/app/venv/
 __pycache__
-docker/docker-compose.yml
+docker/docker-compose.prod.yml

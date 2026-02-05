@@ -12,10 +12,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      ECR_API: web-platform-api
-      ECR_WEB: web-platform-web
-      ECR_NGINX: web-platform-nginx
-      IMAGE_TAG: latest
+      ECR_REPO: web-platform
 
     steps:
       - name: Checkout code
@@ -37,29 +34,23 @@ jobs:
       # ---------- API ----------
       - name: Build & Push API
         run: |
-          docker build -t $ECR_API:$IMAGE_TAG -f services/api/Dockerfile .
-          docker tag $ECR_API:$IMAGE_TAG \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API:$IMAGE_TAG
-          docker push \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API:$IMAGE_TAG
+          docker build -f services/api/Dockerfile \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:api-latest .
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:api-latest
 
       # ---------- WEB ----------
       - name: Build & Push Web
         run: |
-          docker build -t $ECR_WEB:$IMAGE_TAG -f services/web/Dockerfile .
-          docker tag $ECR_WEB:$IMAGE_TAG \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEB:$IMAGE_TAG
-          docker push \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEB:$IMAGE_TAG
+          docker build -f services/web/Dockerfile \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:web-latest .
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:web-latest
 
       # ---------- NGINX ----------
       - name: Build & Push Nginx
         run: |
-          docker build -t $ECR_NGINX:$IMAGE_TAG -f services/nginx/Dockerfile .
-          docker tag $ECR_NGINX:$IMAGE_TAG \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_NGINX:$IMAGE_TAG
-          docker push \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_NGINX:$IMAGE_TAG
+          docker build -f services/nginx/Dockerfile \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:nginx-latest .
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:nginx-latest
 
       # ---------- DEPLOY ----------
       - name: Deploy on EC2
@@ -70,8 +61,32 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-
+            mkdir -p /opt/web-platform
             cd /opt/web-platform
 
-            docker compose pull
-            docker compose up -d
+            cat > docker-compose.prod.yml <<EOF
+            services:
+              api:
+                image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:api-latest
+                container_name: fastapi_app
+
+              web:
+                image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:web-latest
+                container_name: web_app
+
+              nginx:
+                image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:nginx-latest
+                container_name: reverse_proxy
+                ports:
+                  - "80:80"
+                depends_on:
+                  - api
+                  - web
+            EOF
+
+            aws ecr get-login-password --region ${AWS_REGION} \
+              | docker login --username AWS --password-stdin \
+                ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d

@@ -6,13 +6,13 @@ api-dev:
 
 # ===== DOCKER =====
 build:
-	docker compose -f docker/docker-compose.yml build
+	docker compose -f docker/docker-compose.local.yml build
 
 up:
-	docker compose -f docker/docker-compose.yml up
+	docker compose -f docker/docker-compose.local.yml up
 
 down:
-	docker compose -f docker/docker-compose.yml down -v
+	docker compose -f docker/docker-compose.local.yml down -v
 
 logs:
-	docker compose -f docker/docker-compose.yml logs -f
+	docker compose -f docker/docker-compose.local.yml logs -f
