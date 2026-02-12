@@ -1,24 +1,49 @@
-# docker/docker-compose.local.yml
 services:
+  db_wp:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wpuser
+      MYSQL_PASSWORD: wppass
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - db_wp_data:/var/lib/mysql
+
+  db_api:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: fastapi
+      MYSQL_USER: apiuser
+      MYSQL_PASSWORD: apipass
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - db_api_data:/var/lib/mysql
+
+  wordpress:
+    build: ../services/wordpress
+    environment:
+      WORDPRESS_DB_HOST: db_wp
+      WORDPRESS_DB_USER: wpuser
+      WORDPRESS_DB_PASSWORD: wppass
+      WORDPRESS_DB_NAME: wordpress
+    depends_on:
+      - db_wp
+
+  api:
+    build: ../services/api
+    environment:
+      DATABASE_URL: mysql+pymysql://apiuser:apipass@db_api:3306/fastapi
+    depends_on:
+      - db_api
+
   nginx:
-    build:
-      context: ..
-      dockerfile: services/nginx/Dockerfile
-    container_name: reverse_proxy
+    build: ../services/nginx
     ports:
       - "80:80"
     depends_on:
-      - web
+      - wordpress
       - api
 
-  web:
-    build:
-      context: ..
-      dockerfile: services/web/Dockerfile
-    container_name: web_app
-
-  api:
-    build:
-      context: ..
-      dockerfile: services/api/Dockerfile
-    container_name: fastapi_app
+volumes:
+  db_wp_data:
+  db_api_data:

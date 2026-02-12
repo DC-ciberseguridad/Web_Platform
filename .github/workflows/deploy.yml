@@ -68,20 +68,49 @@ jobs:
             services:
               api:
                 image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:api-latest
-                container_name: fastapi_app
+                container_name: api
 
               web:
                 image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:web-latest
-                container_name: web_app
+                container_name: web
+
+              wordpress:
+                image: wordpress:latest
+                environment:
+                  WORDPRESS_DB_HOST: mysql
+                  WORDPRESS_DB_USER: wpuser
+                  WORDPRESS_DB_PASSWORD: wppass
+                  WORDPRESS_DB_NAME: wpdb
+                volumes:
+                  - wp_data:/var/www/html
+                container_name: wordpress      
+                depends_on:
+                  - mysql
+
+              mysql:
+                image: mysql:8.0
+                environment:
+                  MYSQL_DATABASE: wpdb
+                  MYSQL_USER: wpuser
+                  MYSQL_PASSWORD: wppass
+                  MYSQL_ROOT_PASSWORD: rootpass
+                volumes:
+                  - db_data:/var/lib/mysql
+                container_name: mysql      
 
               nginx:
                 image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:nginx-latest
-                container_name: reverse_proxy
+                container_name: nginx
                 ports:
                   - "80:80"
                 depends_on:
                   - api
                   - web
+                  - wordpress
+
+            volumes:
+              wp_data:
+              db_data:
             EOF
 
             aws ecr get-login-password --region ${AWS_REGION} \
