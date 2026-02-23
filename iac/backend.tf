@@ -1,3 +1,5 @@
+#Este bucket guarda el estado de Terraform
+
 terraform {
   backend "s3" {
     bucket  = "terraform-state-webplatform"

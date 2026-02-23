@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Deploy
 
 on:
   push:
@@ -11,40 +11,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - run: |
+      - name: Build Docker Image
+        run: |
           docker build -t nextcloud-app ./services/nextcloud
-          docker tag nextcloud-app:latest ${{ secrets.ECR_REGISTRY }}/nextcloud-app:latest
-          docker push ${{ secrets.ECR_REGISTRY }}/nextcloud-app:latest
+          docker tag nextcloud-app:latest ${{ steps.login-ecr.outputs.registry }}/nextcloud-app:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/nextcloud-app:latest
 
-      - name: Upload env to S3
-        run: |
-          echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> prod.env
-          echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> prod.env
-          echo "NEXTCLOUD_ADMIN_USER=${{ secrets.NEXTCLOUD_ADMIN_USER }}" >> prod.env
-          echo "NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}" >> prod.env
-          echo "ECR_REGISTRY=${{ secrets.ECR_REGISTRY }}" >> prod.env
-
-          aws s3 cp prod.env s3://webplatform-secrets-prod/prod.env
- 
-      - name: Deploy to EC2
-        run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
-          chmod 600 key.pem
-
-          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-          cd Web_Platform &&
-          ./deploy.sh
-          "
-
-  
-          
+      - name: SSH Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/Web_Platform/scripts
+            chmod +x deploy.sh
+            ./deploy.sh

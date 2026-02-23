@@ -139,3 +139,15 @@ resource "aws_instance" "nextcloud" {
     Name = "Nextcloud-Server"
   }
 }
+
+# ====================================
+# Bucket para Secrets de la app ".env"
+# ====================================
+
+resource "aws_s3_bucket" "secrets_bucket" {
+  bucket = "webplatform-secrets-prod"
+
+  tags = {
+    Name = "WebPlatform Secrets"
+  }
+}
