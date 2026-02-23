@@ -1,29 +1,14 @@
-terraform {
-  backend "s3" {
-    bucket  = "terraform-state-webplatform"
-    key     = "lab4/infra.tfstate"
-    region  = "us-east-1"
-    encrypt = true
-  }
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
 provider "aws" {
   region = var.aws_region
 }
 
-############################
-# AMI Ubuntu 22.04 LTS
-############################
+# ===============================
+# AMI Ubuntu 22.04
+# ===============================
+
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners      = ["099720109477"]
 
   filter {
     name   = "name"
@@ -31,57 +16,34 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-############################
-# IAM ROLE (ECR PULL)
-############################
-resource "aws_iam_role" "ec2_role" {
-  name = "web-platform-ec2-role"
+# ===============================
+# ECR Repository
+# ===============================
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
+resource "aws_ecr_repository" "nextcloud" {
+  name = "nextcloud-app"
 }
 
-resource "aws_iam_role_policy_attachment" "ecr_pull" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
+# ===============================
+# Security Group
+# ===============================
 
-resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "web-platform-ec2-profile"
-  role = aws_iam_role.ec2_role.name
-}
+resource "aws_security_group" "ec2_sg" {
+  name = "nextcloud-sg"
 
-############################
-# ECR (UN SOLO REPO)
-############################
-resource "aws_ecr_repository" "web_platform" {
-  name                 = "web-platform"
-  image_tag_mutability = "IMMUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
-}
 
-############################
-# SSH KEY
-############################
-resource "aws_key_pair" "deploy" {
-  key_name   = "web-deploy-key"
-  public_key = var.ssh_public_key
-}
-
-############################
-# SECURITY GROUP (LIMPIO)
-############################
-resource "aws_security_group" "web_sg" {
-  name = "Web_Platform"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
 
   egress {
     from_port   = 0
@@ -89,58 +51,91 @@ resource "aws_security_group" "web_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = {
-    Name       = "Web_Platform"
-    ManagedBy = "terraform"
-  }
 }
 
-resource "aws_security_group_rule" "ssh" {
-  type              = "ingress"
-  from_port         = 22
-  to_port           = 22
-  protocol          = "tcp"
-  cidr_blocks       = var.allowed_ssh_ips
-  security_group_id = aws_security_group.web_sg.id
+# ===============================
+# IAM ROLE para EC2
+# ===============================
+
+resource "aws_iam_role" "ec2_role" {
+  name = "webplatform-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
 }
 
-resource "aws_security_group_rule" "http" {
-  type              = "ingress"
-  from_port         = 80
-  to_port           = 80
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.web_sg.id
+# ===============================
+# IAM POLICY (S3 + ECR)
+# ===============================
+
+resource "aws_iam_policy" "ec2_app_policy" {
+  name = "webplatform-ec2-app-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+
+      # S3 Secrets
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "arn:aws:s3:::webplatform-secrets-prod/*"
+      },
+
+      # ECR Pull Permissions
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
-############################
-# EC2
-############################
-resource "aws_instance" "web" {
+resource "aws_iam_role_policy_attachment" "attach_app_policy" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = aws_iam_policy.ec2_app_policy.arn
+}
+
+# ===============================
+# Instance Profile
+# ===============================
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "webplatform-ec2-profile"
+  role = aws_iam_role.ec2_role.name
+}
+
+# ===============================
+# EC2 INSTANCE
+# ===============================
+
+resource "aws_instance" "nextcloud" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.micro"
-  key_name               = aws_key_pair.deploy.key_name
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
 
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
-  user_data = <<-EOF
-#!/bin/bash
-set -eux
-
-apt-get update -y
-apt-get install -y docker.io awscli
-
-systemctl enable docker
-systemctl start docker
-
-usermod -aG docker ubuntu
-EOF
-
-  user_data_replace_on_change = false
+  user_data = file("${path.module}/../scripts/user_data.sh")
 
   tags = {
-    Name = "Web_Platform"
+    Name = "Nextcloud-Server"
   }
 }

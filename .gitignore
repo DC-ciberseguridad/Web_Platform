@@ -1,5 +1,3 @@
 .terraform/
-.env/
-services/api/app/venv/
-__pycache__
-docker/docker-compose.prod.yml
+.env
+docker/.env

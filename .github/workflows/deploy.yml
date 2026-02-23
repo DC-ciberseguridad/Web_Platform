@@ -1,121 +1,50 @@
-name: Deploy Web Platform
+name: Build & Deploy
 
 on:
   push:
-    branches:
-      - main
+    paths:
+      - "services/**"
+      - "docker/**"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      ECR_REPO: web-platform
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - run: |
+          docker build -t nextcloud-app ./services/nextcloud
+          docker tag nextcloud-app:latest ${{ secrets.ECR_REGISTRY }}/nextcloud-app:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/nextcloud-app:latest
+
+      - name: Upload env to S3
         run: |
-          aws ecr get-login-password --region $AWS_REGION \
-          | docker login --username AWS --password-stdin \
-            $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> prod.env
+          echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> prod.env
+          echo "NEXTCLOUD_ADMIN_USER=${{ secrets.NEXTCLOUD_ADMIN_USER }}" >> prod.env
+          echo "NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}" >> prod.env
+          echo "ECR_REGISTRY=${{ secrets.ECR_REGISTRY }}" >> prod.env
 
-      # ---------- API ----------
-      - name: Build & Push API
+          aws s3 cp prod.env s3://webplatform-secrets-prod/prod.env
+ 
+      - name: Deploy to EC2
         run: |
-          docker build -f services/api/Dockerfile \
-            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:api-latest .
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:api-latest
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
 
-      # ---------- WEB ----------
-      - name: Build & Push Web
-        run: |
-          docker build -f services/web/Dockerfile \
-            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:web-latest .
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:web-latest
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          cd Web_Platform &&
+          ./deploy.sh
+          "
 
-      # ---------- NGINX ----------
-      - name: Build & Push Nginx
-        run: |
-          docker build -f services/nginx/Dockerfile \
-            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:nginx-latest .
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:nginx-latest
-
-      # ---------- DEPLOY ----------
-      - name: Deploy on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -e
-            mkdir -p /opt/web-platform
-            cd /opt/web-platform
-
-            cat > docker-compose.prod.yml <<EOF
-            services:
-              api:
-                image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:api-latest
-                container_name: api
-
-              web:
-                image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:web-latest
-                container_name: web
-
-              wordpress:
-                image: wordpress:latest
-                environment:
-                  WORDPRESS_DB_HOST: mysql
-                  WORDPRESS_DB_USER: wpuser
-                  WORDPRESS_DB_PASSWORD: wppass
-                  WORDPRESS_DB_NAME: wpdb
-                volumes:
-                  - wp_data:/var/www/html
-                container_name: wordpress      
-                depends_on:
-                  - mysql
-
-              mysql:
-                image: mysql:8.0
-                environment:
-                  MYSQL_DATABASE: wpdb
-                  MYSQL_USER: wpuser
-                  MYSQL_PASSWORD: wppass
-                  MYSQL_ROOT_PASSWORD: rootpass
-                volumes:
-                  - db_data:/var/lib/mysql
-                container_name: mysql      
-
-              nginx:
-                image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/web-platform:nginx-latest
-                container_name: nginx
-                ports:
-                  - "80:80"
-                depends_on:
-                  - api
-                  - web
-                  - wordpress
-
-            volumes:
-              wp_data:
-              db_data:
-            EOF
-
-            aws ecr get-login-password --region ${AWS_REGION} \
-              | docker login --username AWS --password-stdin \
-                ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
+  
+          
