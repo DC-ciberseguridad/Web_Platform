@@ -1,7 +1,8 @@
 #!/bin/bash
 
 apt update -y
-apt install -y docker.io docker-compose awscli
+apt install -y awscli
+apt install -y docker.io docker-compose-plugin
 
 systemctl enable docker
 systemctl start docker

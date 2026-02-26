@@ -1,4 +1,4 @@
-#Este bucket guarda el estado de Terraform
+#Este bucket guarda el estado de Terraform para que lo consulte de forma automatica
 
 terraform {
   backend "s3" {

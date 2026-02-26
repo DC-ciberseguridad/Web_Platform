@@ -26,7 +26,7 @@ services:
       - nextcloud_data:/var/www/html
 
   nginx:
-    build: ../services/nginx
+    image: ${ECR_REGISTRY}/nextcloud-app:nginx-latest
     ports:
       - "80:80"
     depends_on:

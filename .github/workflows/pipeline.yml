@@ -1,0 +1,117 @@
+name: WebPlatform CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env: #para acceso global de los steps
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      # =====================
+      # OBTENER ACCOUNT ID
+      # =====================
+      - name: Get AWS Account ID
+        id: aws
+        run: |
+          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+        
+      # =====================
+      # OBTENER IP DEL RUNNER
+      # =====================
+
+      - name: Get Runner IP
+        run: |
+          echo "MI_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV 
+
+      # =====================
+      # TERRAFORM
+      # =====================
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init & Apply
+        run: |
+          cd iac
+          terraform init
+          terraform apply -auto-approve
+             -var="my_ip=[\"$MY_IP\"]"
+
+      # =====================
+      # GENERAR .ENV
+      # =====================
+      - name: Create prod.env
+        run: |
+          cat <<EOF > prod.env
+          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+          NEXTCLOUD_ADMIN_USER=${{ secrets.NEXTCLOUD_ADMIN_USER }}
+          NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}
+          ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
+          EOF
+
+      - name: Upload env to S3
+        run: |
+          aws s3 cp prod.env s3://webplatform-secrets-prod/prod.env
+
+      # =====================
+      # LOGIN ECR
+      # =====================
+      - name: Login to ECR
+        run: |
+           aws ecr get-login-password --region us-east-1 \
+           | docker login --username AWS --password-stdin \
+           ${{ steps.aws.outputs.account_id}}.dkr.ecr.us-east-1.amazonaws.com
+          
+      # =====================
+      # BUILD & PUSH NEXTCLOUD
+      # =====================
+      - name: Build & Push Nextcloud
+        run: |
+          docker build -t nextcloud-app ./services/nextcloud
+          docker tag nextcloud-app:latest \
+            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nextcloud-latest
+          docker push \
+            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nextcloud-latest
+
+      # =====================
+      # BUILD & PUSH NGINX
+      # =====================
+      - name: Build & Push Nginx
+        run: |
+          docker build -t nginx-proxy ./services/nginx
+          docker tag nginx-proxy:latest \
+            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
+          docker push \
+            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
+
+      # =====================
+      # GET EC2 IP
+      # =====================
+      - name: Get EC2 IP
+        id: ec2
+        run: |
+          cd iac
+          echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+          
+      # =====================
+      # TRIGGER DEPLOY
+      # =====================
+      - name: Run deploy.sh on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2.outputs.ip }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            bash /home/ubuntu/Web_Platform/deploy.sh
