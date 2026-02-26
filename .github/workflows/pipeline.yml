@@ -32,7 +32,7 @@ jobs:
 
       - name: Get Runner IP
         run: |
-          echo "MI_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV 
+          echo "MY_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV 
 
       # =====================
       # TERRAFORM
@@ -103,7 +103,7 @@ jobs:
         run: |
           cd iac
           echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
-          
+
       # =====================
       # TRIGGER DEPLOY
       # =====================
