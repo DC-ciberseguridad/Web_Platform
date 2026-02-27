@@ -136,14 +136,6 @@ resource "aws_instance" "nextcloud" {
 }
 
 # ===============================
-# Bucket Secrets
-# ===============================
-
-resource "aws_s3_bucket" "secrets_bucket" {
-  bucket = "webplatform-secrets-prod"
-}
-
-# ===============================
 # Outputs
 # ===============================
 
