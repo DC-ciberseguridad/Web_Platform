@@ -107,9 +107,9 @@ jobs:
           cd iac
           echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
 
-      # =====================
+      # ====================
       # WAIT FOR USER DATA
-      # =====================
+      # ====================
       - name: Wait for EC2 to finish user_data
         run: sleep 40 
 
