@@ -1,32 +1,41 @@
 #!/bin/bash
 
 apt update -y
-apt install -y awscli
-apt install -y docker.io docker-compose-plugin
+apt install -y awscli docker.io docker-compose-plugin
 
 systemctl enable docker
 systemctl start docker
 
-usermod -aG docker ubuntu
-
-# Crear estructura del proyecto
+# Crear estructura
 mkdir -p /home/ubuntu/Web_Platform/docker
 
-# Crear deploy.sh automáticamente
+# Dar permisos correctos
+chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
+
+# Crear deploy.sh
 cat << 'EOF' > /home/ubuntu/Web_Platform/deploy.sh
 #!/bin/bash
 
+set -e
+
 cd /home/ubuntu/Web_Platform
 
+# Descargar env
 aws s3 cp s3://webplatform-secrets-prod/prod.env docker/.env
 chmod 600 docker/.env
 
-aws ecr get-login-password --region us-east-1 \
-| docker login --username AWS --password-stdin 838054320781.dkr.ecr.us-east-1.amazonaws.com
+# Obtener account ID dinámicamente
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-docker pull 838054320781.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:latest
+aws ecr get-login-password --region us-east-1 \
+| docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+
+# Pull imágenes correctas
+docker pull ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nextcloud-latest
+docker pull ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
 
 cd docker
+
 docker compose -f docker-compose.prod.yml up -d
 EOF
 
