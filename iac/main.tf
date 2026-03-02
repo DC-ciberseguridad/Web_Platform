@@ -17,6 +17,16 @@ data "aws_ami" "ubuntu" {
 }
 
 # ===============================
+# KEY PAIR
+# ===============================
+
+resource "aws_key_pair" "webplatform" {
+  key_name = "webplatform-key"
+  public_key = var.ssh_public_key
+  
+}
+
+# ===============================
 # ECR Repository (ÚNICO)
 # ===============================
 
@@ -124,7 +134,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 resource "aws_instance" "nextcloud" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.micro"
-  key_name               = "webplatform-key"
+  key_name               = aws_key_pair.webplatform.key_name
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 

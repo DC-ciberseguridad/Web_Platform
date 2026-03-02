@@ -5,3 +5,9 @@ variable "my_ip" {
   # EJEMPLO:
   # ["190.123.45.67/32"]
 }
+
+variable "ssh_public_key" {
+  description = "SSH public key for EC2 access"
+  type        = string
+  
+}

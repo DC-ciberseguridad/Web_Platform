@@ -44,6 +44,7 @@ jobs:
       - name: Terraform Init & Apply
         env:
           TF_VAR_my_ip: '["${{ env.MY_IP }}"]'
+          TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
         run: |
           cd iac
           terraform init
@@ -114,6 +115,6 @@ jobs:
         with:
           host: ${{ steps.ec2.outputs.ip }}
           username: ubuntu
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             bash /home/ubuntu/Web_Platform/deploy.sh
