@@ -110,8 +110,18 @@ jobs:
       # ====================
       # WAIT FOR USER DATA
       # ====================
-      - name: Wait for EC2 to finish user_data
-        run: sleep 40 
+      - name: Wait for EC2 cloud-init to finish
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2.outputs.ip }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            while [ ! -f /home/ubuntu/USER_DATA_FINISHED ]; do
+              echo "Waiting for user_data to finish..."
+              sleep 5
+            done
+            echo "User data completed."
 
       # =====================
       # TRIGGER DEPLOY
@@ -124,3 +134,17 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             bash /home/ubuntu/Web_Platform/deploy.sh
+
+      # =====================
+      # DEBUG EC2
+      # =====================     
+      - name: Debug EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with: 
+          host: ${{ steps.ec2.outputs.ip }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            whoami
+            docker --version
+            ls -la /home/ubuntu/Web_Platform  

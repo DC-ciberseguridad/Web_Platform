@@ -41,3 +41,5 @@ EOF
 
 chmod +x /home/ubuntu/Web_Platform/deploy.sh
 chown ubuntu:ubuntu /home/ubuntu/Web_Platform/deploy.sh
+
+touch /home/ubuntu/USER_DATA_FINISHED
