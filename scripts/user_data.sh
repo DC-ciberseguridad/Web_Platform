@@ -1,7 +1,12 @@
 #!/bin/bash
 
 apt update -y
-apt install -y awscli docker.io docker-compose-plugin
+
+apt install -y docker.io docker-compose-plugin unzip curl
+
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+./aws/install
 
 systemctl enable docker
 systemctl start docker
