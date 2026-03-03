@@ -110,6 +110,19 @@ jobs:
       # ====================
       # WAIT FOR USER DATA
       # ====================
+      - name: Debug cloud-init
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+         host: ${{ steps.ec2.outputs.ip }}
+         username: ubuntu
+         key: ${{ secrets.EC2_SSH_KEY }}
+         script: |
+            echo "===== CLOUD INIT LOG ====="
+            sudo tail -n 100 /var/log/cloud-init-output.log     
+
+      # ====================
+      # WAIT FOR USER DATA
+      # ====================
       - name: Wait for EC2 cloud-init to finish
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -117,11 +130,8 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            while [ ! -f /home/ubuntu/USER_DATA_FINISHED ]; do
-              echo "Waiting for user_data to finish..."
-              sleep 5
-            done
-            echo "User data completed."
+            sudo cloud-init status --wait
+            echo "Cloud-init finished"
 
       # =====================
       # TRIGGER DEPLOY
