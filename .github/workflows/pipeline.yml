@@ -98,7 +98,7 @@ jobs:
           docker push \
             ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
 
-      # =====================
+            # =====================
       # GET EC2 IP
       # =====================
       - name: Get EC2 IP
@@ -107,23 +107,21 @@ jobs:
           cd iac
           echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
 
-      # ====================
-      # WAIT FOR USER DATA
-      # ====================
-      - name: Debug cloud-init
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-         host: ${{ steps.ec2.outputs.ip }}
-         username: ubuntu
-         key: ${{ secrets.EC2_SSH_KEY }}
-         script: |
-            echo "===== CLOUD INIT LOG ====="
-            sudo tail -n 100 /var/log/cloud-init-output.log     
+      # =====================
+      # WAIT FOR SSH PORT
+      # =====================
+      - name: Wait for SSH port
+        run: |
+          for i in {1..30}; do
+            nc -zv ${{ steps.ec2.outputs.ip }} 22 && break
+            echo "Waiting for SSH..."
+            sleep 5
+          done
 
-      # ====================
-      # WAIT FOR USER DATA
-      # ====================
-      - name: Wait for EC2 cloud-init to finish
+      # =====================
+      # WAIT FOR CLOUD INIT
+      # =====================
+      - name: Wait for EC2 cloud-init
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ steps.ec2.outputs.ip }}
@@ -134,7 +132,7 @@ jobs:
             echo "Cloud-init finished"
 
       # =====================
-      # TRIGGER DEPLOY
+      # RUN DEPLOY
       # =====================
       - name: Run deploy.sh on EC2
         uses: appleboy/ssh-action@v0.1.7
@@ -146,15 +144,15 @@ jobs:
             bash /home/ubuntu/Web_Platform/deploy.sh
 
       # =====================
-      # DEBUG EC2
-      # =====================     
+      # DEBUG FINAL
+      # =====================
       - name: Debug EC2
         uses: appleboy/ssh-action@v0.1.7
-        with: 
+        with:
           host: ${{ steps.ec2.outputs.ip }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             whoami
             docker --version
-            ls -la /home/ubuntu/Web_Platform  
+            docker ps
