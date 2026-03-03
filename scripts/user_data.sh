@@ -26,13 +26,13 @@ set -e
 cd /home/ubuntu/Web_Platform
 
 # Descargar env
-aws s3 cp s3://webplatform-secrets-prod/prod.env docker/.env
+/usr/local/bin/aws s3 cp s3://webplatform-secrets-prod/prod.env docker/.env
 chmod 600 docker/.env
 
 # Obtener account ID dinámicamente
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT_ID=$(/usr/local/bin/aws sts get-caller-identity --query Account --output text)
 
-aws ecr get-login-password --region us-east-1 \
+/usr/local/bin/aws ecr get-login-password --region us-east-1 \
 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
 
 # Pull imágenes correctas
