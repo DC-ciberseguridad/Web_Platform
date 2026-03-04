@@ -1,9 +1,5 @@
 #!/bin/bash
 
-set -e
-
-export DEBIAN_FRONTEND=noninteractive
-
 apt update -y
 apt install -y docker.io docker-compose-plugin unzip curl
 
@@ -23,8 +19,6 @@ sudo chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
 # Crear deploy.sh
 cat << 'EOF' > /home/ubuntu/Web_Platform/deploy.sh
 #!/bin/bash
-
-set -e
 
 cd /home/ubuntu/Web_Platform
 
