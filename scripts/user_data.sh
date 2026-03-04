@@ -1,12 +1,24 @@
-#!/bin/bash
 
-apt-get update -y
-apt-get install -y docker.io docker-compose-plugin unzip curl awscli
+#!/bin/bash
+set -e
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt update -y
+apt install -y docker.io docker-compose-plugin unzip curl
 
 systemctl enable docker
 systemctl start docker
 
 usermod -aG docker ubuntu
+
+# ===== INSTALL AWS CLI V2 CORRECTAMENTE =====
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+unzip /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install
+
+#==================================================
+
 mkdir -p /home/ubuntu/Web_Platform/docker
 chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
 
