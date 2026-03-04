@@ -1,7 +1,7 @@
 #!/bin/bash
 
-apt update -y
-apt install -y docker.io docker-compose-plugin unzip curl
+sudo apt update -y
+sudo apt install -y docker.io docker-compose-plugin unzip curl
 
 curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip -q awscliv2.zip
