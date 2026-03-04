@@ -15,10 +15,10 @@ systemctl enable docker
 systemctl start docker
 
 # Crear estructura
-mkdir -p /home/ubuntu/Web_Platform/docker
+sudo mkdir -p /home/ubuntu/Web_Platform/docker
 
 # Dar permisos correctos
-chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
+sudo chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
 
 # Crear deploy.sh
 cat << 'EOF' > /home/ubuntu/Web_Platform/deploy.sh

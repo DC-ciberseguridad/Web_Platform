@@ -140,6 +140,7 @@ resource "aws_instance" "nextcloud" {
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
   user_data = file("${path.module}/../scripts/user_data.sh")
+  user_data_replace_on_change = true
 
   tags = {
     Name = "Nextcloud-Server"
