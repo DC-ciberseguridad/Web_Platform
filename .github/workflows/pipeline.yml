@@ -9,49 +9,86 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env: #para acceso global de los steps
-      
+    env:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     steps:
+      # =====================
+      # CHECKOUT
+      # =====================
       - name: Checkout
         uses: actions/checkout@v3
-        
+
       # =====================
-      # OBTENER ACCOUNT ID
+      # GET AWS ACCOUNT ID
       # =====================
       - name: Get AWS Account ID
         id: aws
         run: |
           echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
-        
-      # =====================
-      # OBTENER IP DEL RUNNER
-      # =====================
 
+      # =====================
+      # GET RUNNER IP
+      # =====================
       - name: Get Runner IP
         run: |
           echo "MY_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV 
 
       # =====================
-      # TERRAFORM
+      # SETUP TERRAFORM
       # =====================
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # =====================
+      # TERRAFORM APPLY
+      # =====================
       - name: Terraform Init & Apply
         env:
           TF_VAR_my_ip: '["${{ env.MY_IP }}"]'
           TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
         run: |
           cd iac
-          terraform init
+          terraform init -reconfigure
           terraform apply -auto-approve
 
       # =====================
-      # GENERAR .ENV
+      # GET EC2 IP (INMEDIATAMENTE DESPUÉS DE APPLY)
+      # =====================
+      - name: Get EC2 IP
+        id: ec2
+        run: |
+          cd iac
+          echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+
+      # =====================
+      # WAIT FOR SSH PORT
+      # =====================
+      - name: Wait for SSH port
+        run: |
+          for i in {1..40}; do
+            nc -zv ${{ steps.ec2.outputs.ip }} 22 && break
+            echo "Waiting for SSH..."
+            sleep 5
+          done
+
+      # =====================
+      # WAIT FOR CLOUD-INIT (CRÍTICO)
+      # =====================
+      - name: Wait for EC2 cloud-init
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ steps.ec2.outputs.ip }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cloud-init status --wait
+            echo "Cloud-init finished"
+
+      # =====================
+      # CREATE .ENV
       # =====================
       - name: Create prod.env
         run: |
@@ -60,7 +97,7 @@ jobs:
           MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
           NEXTCLOUD_ADMIN_USER=${{ secrets.NEXTCLOUD_ADMIN_USER }}
           NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}
-          ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
+          ECR_REGISTRY=${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com
           EOF
 
       - name: Upload env to S3
@@ -68,14 +105,14 @@ jobs:
           aws s3 cp prod.env s3://webplatform-secrets-prod/prod.env
 
       # =====================
-      # LOGIN ECR
+      # LOGIN TO ECR
       # =====================
       - name: Login to ECR
         run: |
-           aws ecr get-login-password --region us-east-1 \
-           | docker login --username AWS --password-stdin \
-           ${{ steps.aws.outputs.account_id}}.dkr.ecr.us-east-1.amazonaws.com
-          
+          aws ecr get-login-password --region us-east-1 \
+          | docker login --username AWS --password-stdin \
+          ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com
+
       # =====================
       # BUILD & PUSH NEXTCLOUD
       # =====================
@@ -98,39 +135,6 @@ jobs:
           docker push \
             ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
 
-            # =====================
-      # GET EC2 IP
-      # =====================
-      - name: Get EC2 IP
-        id: ec2
-        run: |
-          cd iac
-          echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
-
-      # =====================
-      # WAIT FOR SSH PORT
-      # =====================
-      - name: Wait for SSH port
-        run: |
-          for i in {1..30}; do
-            nc -zv ${{ steps.ec2.outputs.ip }} 22 && break
-            echo "Waiting for SSH..."
-            sleep 5
-          done
-
-      # =====================
-      # WAIT FOR CLOUD INIT
-      # =====================
-      - name: Wait for EC2 cloud-init
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ steps.ec2.outputs.ip }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo cloud-init status --wait
-            echo "Cloud-init finished"
-
       # =====================
       # RUN DEPLOY
       # =====================
@@ -141,10 +145,12 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            ls -la /home/ubuntu
+            ls -la /home/ubuntu/Web_Platform || echo "Folder missing"
             bash /home/ubuntu/Web_Platform/deploy.sh
 
       # =====================
-      # DEBUG FINAL
+      # FINAL DEBUG
       # =====================
       - name: Debug EC2
         uses: appleboy/ssh-action@v0.1.7

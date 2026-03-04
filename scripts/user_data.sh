@@ -1,10 +1,5 @@
 #!/bin/bash
 
-set -e
-exec > /home/ubuntu/userdata.log 2>&1
-
-export DEBIAN_FRONTEND=noninteractive
-
 apt-get update -y
 apt-get install -y docker.io docker-compose-plugin unzip curl awscli
 
@@ -17,7 +12,6 @@ chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
 
 cat << 'EOF' > /home/ubuntu/Web_Platform/deploy.sh
 #!/bin/bash
-set -e
 
 cd /home/ubuntu/Web_Platform
 

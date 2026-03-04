@@ -1,3 +1,4 @@
-.terraform/
+iac/.terraform/
+iac/.terraform.lock.hcl
 .env
 docker/.env
