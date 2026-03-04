@@ -5,8 +5,8 @@ exec > /home/ubuntu/userdata.log 2>&1
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt update -y
-apt install -y docker.io docker-compose-plugin unzip curl awscli
+apt-get update -y
+apt-get install -y docker.io docker-compose-plugin unzip curl awscli
 
 systemctl enable docker
 systemctl start docker
