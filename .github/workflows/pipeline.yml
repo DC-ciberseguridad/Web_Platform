@@ -147,7 +147,7 @@ jobs:
           script: |
             ls -la /home/ubuntu
             ls -la /home/ubuntu/Web_Platform || echo "Folder missing"
-            bash /home/ubuntu/Web_Platform/deploy.sh
+            sudo bash /home/ubuntu/Web_Platform/deploy.sh
 
       # =====================
       # FINAL DEBUG
