@@ -2,8 +2,6 @@
 #!/bin/bash
 set -e
 
-export DEBIAN_FRONTEND=noninteractive
-
 apt update -y
 apt install -y docker.io docker-compose-plugin unzip curl
 
