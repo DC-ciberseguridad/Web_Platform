@@ -1,164 +1,132 @@
-name: WebPlatform CI/CD
+name: Deploy Web Platform
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
     steps:
-      # =====================
-      # CHECKOUT
-      # =====================
+
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+     # ===================== 
+     # AWS CREDENTIALS 
+     # =====================    
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
       # =====================
-      # GET AWS ACCOUNT ID
+      # TERRAFORM INIT
       # =====================
-      - name: Get AWS Account ID
-        id: aws
+      - name: Terraform Init
+        working-directory: ./iac
+        run: terraform init
+
+      # =====================
+      # TERRAFORM APPLY
+      # =====================
+      - name: Terraform Apply
+        working-directory: ./iac
+        run: terraform apply -auto-approve
+
+      # =====================
+      # GET IP HOST & ECR
+      # =====================  
+
+      - name: Get Terraform Outputs
+        working-directory: ./iac
         run: |
-          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+          echo "EC2_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
+          # Extraemos solo el dominio del ECR (sin el nombre del repo)
+          echo "ECR_REGISTRY=$(terraform output -raw ecr_repository_url | cut -d'/' -f1)" >> $GITHUB_ENV
+          echo "SG_ID=$(terraform output -raw security_group_id)" >> $GITHUB_ENV
 
       # =====================
       # GET RUNNER IP
       # =====================
       - name: Get Runner IP
         run: |
-          echo "MY_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV 
+          echo "MY_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV
 
       # =====================
-      # SETUP TERRAFORM
+      # AUTHORIZE RUNNER
       # =====================
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      # =====================
-      # TERRAFORM APPLY
-      # =====================
-      - name: Terraform Init & Apply
-        env:
-          TF_VAR_my_ip: '["${{ env.MY_IP }}"]'
-          TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
+      - name: Allow SSH from runner
         run: |
-          cd iac
-          terraform init -reconfigure
-          terraform apply -auto-approve
+          aws ec2 authorize-security-group-ingress \
+            --group-id $SG_ID \
+            --protocol tcp \
+            --port 22 \
+            --cidr $MY_IP
 
       # =====================
-      # GET EC2 IP (INMEDIATAMENTE DESPUÉS DE APPLY)
+      # BUILD & PUSH TO ECR
       # =====================
-      - name: Get EC2 IP
-        id: ec2
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push images
         run: |
-          cd iac
-          echo "ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+          docker build -t ${{ env.ECR_REGISTRY }}/nextcloud-app:latest ./services/nextcloud
+          # CAMBIO: Usar el nombre que espera el docker-compose (nextcloud-nginx)
+          docker build -t ${{ env.ECR_REGISTRY }}/nextcloud-nginx:latest ./services/nginx
+          docker push ${{ env.ECR_REGISTRY }}/nextcloud-app:latest
+          docker push ${{ env.ECR_REGISTRY }}/nextcloud-nginx:latest
 
       # =====================
-      # WAIT FOR SSH PORT
+      # COPY CODE
       # =====================
-      - name: Wait for SSH port
-        run: |
-          for i in {1..40}; do
-            nc -zv ${{ steps.ec2.outputs.ip }} 22 && break
-            echo "Waiting for SSH..."
-            sleep 5
-          done
-
-      # =====================
-      # WAIT FOR CLOUD-INIT (CRÍTICO)
-      # =====================
-      - name: Wait for EC2 cloud-init
-        uses: appleboy/ssh-action@v0.1.7
+      - name: Copy files to EC2
+        uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ steps.ec2.outputs.ip }}
+          host: ${{ env.EC2_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cloud-init status --wait
-            echo "Cloud-init finished"
+          source: "."
+          target: "/home/ubuntu/Web_Platform"
 
       # =====================
       # CREATE .ENV
       # =====================
-      - name: Create prod.env
-        run: |
-          cat <<EOF > prod.env
-          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-          MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-          NEXTCLOUD_ADMIN_USER=${{ secrets.NEXTCLOUD_ADMIN_USER }}
-          NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}
-          ECR_REGISTRY=${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com
-          EOF
-
-      - name: Upload env to S3
-        run: |
-          aws s3 cp prod.env s3://webplatform-secrets-prod/prod.env
-
-      # =====================
-      # LOGIN TO ECR
-      # =====================
-      - name: Login to ECR
-        run: |
-          aws ecr get-login-password --region us-east-1 \
-          | docker login --username AWS --password-stdin \
-          ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com
-
-      # =====================
-      # BUILD & PUSH NEXTCLOUD
-      # =====================
-      - name: Build & Push Nextcloud
-        run: |
-          docker build -t nextcloud-app ./services/nextcloud
-          docker tag nextcloud-app:latest \
-            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nextcloud-latest
-          docker push \
-            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nextcloud-latest
-
-      # =====================
-      # BUILD & PUSH NGINX
-      # =====================
-      - name: Build & Push Nginx
-        run: |
-          docker build -t nginx-proxy ./services/nginx
-          docker tag nginx-proxy:latest \
-            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
-          docker push \
-            ${{ steps.aws.outputs.account_id }}.dkr.ecr.us-east-1.amazonaws.com/nextcloud-app:nginx-latest
-
-      # =====================
-      # RUN DEPLOY
-      # =====================
-      - name: Run deploy.sh on EC2
-        uses: appleboy/ssh-action@v0.1.7
+      - name: Create env file on EC2
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ steps.ec2.outputs.ip }}
+          host: ${{ env.EC2_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            ls -la /home/ubuntu
-            ls -la /home/ubuntu/Web_Platform || echo "Folder missing"
-            sudo bash /home/ubuntu/Web_Platform/deploy.sh
+            cd /home/ubuntu/Web_Platform/docker
+
+            cat <<EOF > .env
+            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+            NEXTCLOUD_ADMIN_USER=${{ secrets.NEXTCLOUD_ADMIN_USER }}
+            NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}
+            ECR_REGISTRY=${{ env.ECR_REGISTRY }}
+            EOF
 
       # =====================
-      # FINAL DEBUG
+      # DEPLOY
       # =====================
-      - name: Debug EC2
-        uses: appleboy/ssh-action@v0.1.7
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ steps.ec2.outputs.ip }}
+          host: ${{ env.EC2_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            whoami
-            docker --version
-            docker ps
+            # Ir a la carpeta raíz del proyecto
+            cd /home/ubuntu/Web_Platform
+            # Dar permisos a todo el contenido de scripts
+            chmod +x scripts/*.sh
+            # Ejecutar el deploy desde la raíz
+            ./scripts/deploy.sh         
