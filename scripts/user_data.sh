@@ -3,8 +3,8 @@
 
 apt update -y
 apt upgrade -y
-apt install -y docker.io docker-compose-plugin unzip curl git
 
+apt install -y docker.io docker-compose-plugin unzip curl git awscli
 systemctl enable docker
 systemctl start docker
 usermod -aG docker ubuntu
