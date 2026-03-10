@@ -43,7 +43,7 @@ jobs:
       # =====================
       - name: Terraform Apply
         working-directory: ./iac
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve -var="my_ip=['${{ env.MY_IP }}']"
 
       # =====================
       # GET IP HOST & ECR
