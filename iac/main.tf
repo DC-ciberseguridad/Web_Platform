@@ -77,7 +77,13 @@ resource "aws_security_group" "web_sg" {
   }
 }
 
-# 4. EC2 Instance
+# 4. EC2 key pair
+resource "aws_key_pair" "webplatform" {
+  key_name   = "webplatform-key"
+  public_key = var.ssh_public_key
+}
+
+# 5. EC2 Instance
 resource "aws_instance" "web" {
   ami                         = "ami-053b0d53c279acc90"
   instance_type               = "t3.micro"
