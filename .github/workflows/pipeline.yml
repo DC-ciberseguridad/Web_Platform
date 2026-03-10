@@ -52,8 +52,8 @@ jobs:
         working-directory: ./iac
         run: |
           terraform apply -auto-approve \
-          -var="my_ip=['${{ env.MY_IP }}']" \
-          -var="ssh_public_key=${{ vars.SSH_PUBLIC_KEY }}"
+          -var='my_ip=["${{ env.MY_IP }}"]' \
+          -var='ssh_public_key=${{ vars.SSH_PUBLIC_KEY }}'
 
       # =====================
       # GET IP HOST & ECR
