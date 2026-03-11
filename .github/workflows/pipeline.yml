@@ -133,7 +133,7 @@ jobs:
             export TOKEN=$(aws ecr get-login-password --region us-east-1)
             
             # 3. Login y Deploy directo (sin scripts externos para evitar fallos de rutas)
-            echo "$TOKEN" | sudo docker login --username AWS --password-stdin 838054320781.dkr.ecr.us-east-1.amazonaws.com
+            echo "$TOKEN" | sudo docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             
             cd /home/ubuntu/Web_Platform
             sudo docker compose -f docker/docker-compose.prod.yml pull
