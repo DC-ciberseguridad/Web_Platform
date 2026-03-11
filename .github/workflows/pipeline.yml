@@ -12,14 +12,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-
-     # =====================
-      # GET RUNNER IP
-      # =====================
-      - name: Get Runner IP
-        run: |
-          echo "MY_IP=$(curl -s https://ifconfig.me)/32" >> $GITHUB_ENV  
-          
+    
       # ===================== 
       # SETUP TERRAFORM
       # ===================== 
@@ -81,6 +74,21 @@ jobs:
           docker push ${{ env.ECR_REGISTRY }}/nextcloud-nginx:latest
 
       # =====================
+      # GET RUNNER IP
+      # =====================
+      - name: Get GitHub Runner IP
+        id: ip
+        run: echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+      - name: Add GitHub IP to Security Group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ env.SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 || true 
+
+      # =====================
       # COPY CODE
       # =====================
       - name: Copy files to EC2
@@ -111,7 +119,7 @@ jobs:
             NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}
             ECR_REGISTRY=${{ env.ECR_REGISTRY }}
             EOF
-  
+
       # =====================
       # DEPLOY
       # =====================
@@ -138,7 +146,17 @@ jobs:
             cd /home/ubuntu/Web_Platform
             sudo docker compose -f docker/docker-compose.prod.yml pull
             sudo docker compose -f docker/docker-compose.prod.yml up -d
-            
-            
-            
+
+      # =====================
+      # REMOVE GITHUB IP
+      # =====================      
+
+      - name: Remove GitHub IP from Security Group (Opcional)
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ env.SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 || true    
            
