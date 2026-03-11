@@ -113,6 +113,12 @@ jobs:
             EOF
 
       # =====================
+      # WAIT FOR EC2
+      # =====================
+      - name: Wait for EC2 initialization
+        run: sleep 40 #Espera 40 segundos a que user_data termine de instalar todo  
+            
+      # =====================
       # DEPLOY
       # =====================
       - name: Deploy

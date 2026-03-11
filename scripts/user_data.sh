@@ -1,15 +1,9 @@
-
 #!/bin/bash
 
-apt update -y
-apt upgrade -y
-
-apt install -y docker.io docker-compose-plugin unzip curl git awscli
-systemctl enable docker
+apt-get update
+apt-get install -y docker.io docker-compose-plugin awscli
 systemctl start docker
+systemctl enable docker
+
+# Agregar al usuario ubuntu al grupo docker para evitar usar sudo
 usermod -aG docker ubuntu
-
-#==================================================
-
-mkdir -p /home/ubuntu/Web_Platform
-chown -R ubuntu:ubuntu /home/ubuntu/Web_Platform
