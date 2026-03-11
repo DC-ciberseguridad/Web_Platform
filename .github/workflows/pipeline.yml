@@ -13,6 +13,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
     
+      # =====================
+      # GET RUNNER IP
+      # =====================
+      - name: Get GitHub Runner IP
+        id: ip
+        run: echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+      - name: Add GitHub IP to Security Group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ env.SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 || true 
+
       # ===================== 
       # SETUP TERRAFORM
       # ===================== 
@@ -72,21 +87,6 @@ jobs:
           docker build -t ${{ env.ECR_REGISTRY }}/nextcloud-nginx:latest ./services/nginx     
           docker push ${{ env.ECR_REGISTRY }}/nextcloud-app:latest
           docker push ${{ env.ECR_REGISTRY }}/nextcloud-nginx:latest
-
-      # =====================
-      # GET RUNNER IP
-      # =====================
-      - name: Get GitHub Runner IP
-        id: ip
-        run: echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
-
-      - name: Add GitHub IP to Security Group
-        run: |
-          aws ec2 authorize-security-group-ingress \
-            --group-id ${{ env.SG_ID }} \
-            --protocol tcp \
-            --port 22 \
-            --cidr ${{ steps.ip.outputs.ipv4 }}/32 || true 
 
       # =====================
       # COPY CODE
