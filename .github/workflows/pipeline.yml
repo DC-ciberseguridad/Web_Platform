@@ -127,10 +127,12 @@ jobs:
           host: ${{ env.EC2_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: ECR_TOKEN,ECR_REGISTRY  # Pasamos las variables al entorno SSH
           script: |
-            # Ir a la carpeta raíz del proyecto
+            # Generar el token en el Runner y pasarlo a la EC2
+            export ECR_TOKEN=$(aws ecr get-login-password --region us-east-1)
+            export ECR_REGISTRY=${{ env.ECR_REGISTRY }}
+            
             cd /home/ubuntu/Web_Platform
-            # Dar permisos a todo el contenido de scripts
             chmod +x scripts/*.sh
-            # Ejecutar el deploy desde la raíz
-            ./scripts/deploy.sh         
+            ./scripts/deploy.sh        
