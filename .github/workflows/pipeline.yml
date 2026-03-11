@@ -124,7 +124,7 @@ jobs:
           script: |
             # 1. Instalar Docker de forma genérica
             sudo apt-get update -y
-            sudo apt-get install -y docker.io
+            sudo apt-get install -y docker-compose-v2
             sudo systemctl start docker
             
             # 2. Obtener el Token (esto se ejecuta en la EC2)
