@@ -111,13 +111,7 @@ jobs:
             NEXTCLOUD_ADMIN_PASSWORD=${{ secrets.NEXTCLOUD_ADMIN_PASSWORD }}
             ECR_REGISTRY=${{ env.ECR_REGISTRY }}
             EOF
-
-      # =====================
-      # WAIT FOR EC2
-      # =====================
-      - name: Wait for EC2 initialization
-        run: sleep 40 #Espera 40 segundos a que user_data termine de instalar todo  
-            
+  
       # =====================
       # DEPLOY
       # =====================
@@ -127,12 +121,23 @@ jobs:
           host: ${{ env.EC2_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: ECR_TOKEN,ECR_REGISTRY  # Pasamos las variables al entorno SSH
+          # Exportamos el token de AWS desde el Runner de GitHub
           script: |
-            # Generar el token en el Runner y pasarlo a la EC2
+            # 1. Esperar a que Docker esté instalado y listo (máximo 2 minutos)
+            echo "Esperando a que Docker termine de instalarse en la EC2..."
+            for i in {1..24}; do
+              if command -v docker &> /dev/null && docker ps &> /dev/null; then
+                echo "Docker detectado y funcionando!"
+                break
+              fi
+              echo "Docker no listo, reintentando en 5 segundos ($i/24)..."
+              sleep 5
+            done
+
+            # 2. Ahora que Docker está listo, ejecutamos el deploy
             export ECR_TOKEN=$(aws ecr get-login-password --region us-east-1)
             export ECR_REGISTRY=${{ env.ECR_REGISTRY }}
             
             cd /home/ubuntu/Web_Platform
             chmod +x scripts/*.sh
-            ./scripts/deploy.sh        
+            ./scripts/deploy.sh
