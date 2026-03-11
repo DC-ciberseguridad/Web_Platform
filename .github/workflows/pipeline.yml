@@ -122,22 +122,28 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # 1. Forzar instalación de Docker si no existe
+            # 1. Instalación forzada y limpia
             if ! command -v docker &> /dev/null; then
-              echo "Docker no encontrado. Instalando manualmente..."
-              sudo apt-get update
-              sudo apt-get install -y docker.io
+              echo "Instalando Docker..."
+              sudo apt-get update -y
+              sudo apt-get install -y docker.io docker-compose-plugin
               sudo systemctl start docker
               sudo usermod -aG docker ubuntu
-              # Aplicar cambios de grupo para la sesión actual
-              newgrp docker <<EONG
             fi
 
-            # 2. Generar token y ejecutar deploy
+            # 2. Generar token y Variables
+            # Usamos sudo en los comandos de docker para evitar líos de grupos en esta sesión
             export ECR_TOKEN=$(aws ecr get-login-password --region us-east-1)
             export ECR_REGISTRY=${{ env.ECR_REGISTRY }}
             
+            # 3. Ejecutar Deploy
             cd /home/ubuntu/Web_Platform
-            # Asegurarnos que el script de deploy use sudo para docker si es necesario
             chmod +x scripts/*.sh
-            ./scripts/deploy.sh
+            sudo ./scripts/deploy.sh
+            
+            # Pasamos las variables al script de deploy
+            ECR_TOKEN=$ECR_TOKEN ECR_REGISTRY=$ECR_REGISTRY ./scripts/deploy.sh
+            
+            
+            
+           
